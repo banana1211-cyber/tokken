@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tokkyon - 特許明細書自動生成</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-top">
+                <h1>📄 Tokkyon</h1>
+                <a href="/settings" class="settings-link">⚙️ 設定</a>
+            </div>
+            <p class="subtitle">GitHubリポジトリから特許明細書を自動生成</p>
+        </header>
+
+        <main class="main">
+            <form id="generate-form" class="generate-form">
+                <div class="form-group">
+                    <label for="repo-url">GitHubリポジトリURL</label>
+                    <input type="text" id="repo-url" name="repo_url" placeholder="https://github.com/owner/repo"
+                        required>
+                </div>
+
+                <div class="form-group">
+                    <label for="applicant">出願人</label>
+                    <input type="text" id="applicant" name="applicant" placeholder="株式会社○○" value="出願人">
+                </div>
+
+                <div class="form-group">
+                    <label for="llm-provider">LLMプロバイダー</label>
+                    <select id="llm-provider" name="llm_provider">
+                        <option value="openai">OpenAI (GPT-4)</option>
+                        <option value="lmstudio">LMStudio (ローカル)</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="btn btn-primary" id="generate-btn">
+                    <span class="btn-text">🚀 明細書を生成</span>
+                    <span class="btn-loading" style="display: none;">⏳ 生成中...</span>
+                </button>
+            </form>
+
+            <div id="result" class="result" style="display: none;">
+                <div class="result-header">
+                    <h2>✅ 生成完了</h2>
+                    <a id="editor-link" href="#" class="btn btn-secondary">📝 エディタで開く</a>
+                </div>
+                <div id="preview" class="preview"></div>
+            </div>
+
+            <div id="error" class="error" style="display: none;"></div>
+        </main>
+
+        <footer class="footer">
+            <p>Powered by FastAPI + LLM</p>
+        </footer>
+    </div>
+
+    <script>
+        const form = document.getElementById('generate-form');
+        const generateBtn = document.getElementById('generate-btn');
+        const btnText = generateBtn.querySelector('.btn-text');
+        const btnLoading = generateBtn.querySelector('.btn-loading');
+        const resultDiv = document.getElementById('result');
+        const previewDiv = document.getElementById('preview');
+        const editorLink = document.getElementById('editor-link');
+        const errorDiv = document.getElementById('error');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            // UIリセット
+            resultDiv.style.display = 'none';
+            errorDiv.style.display = 'none';
+            btnText.style.display = 'none';
+            btnLoading.style.display = 'inline';
+            generateBtn.disabled = true;
+
+            const formData = {
+                repo_url: document.getElementById('repo-url').value,
+                applicant: document.getElementById('applicant').value,
+                llm_provider: document.getElementById('llm-provider').value
+            };
+
+            try {
+                const response = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    previewDiv.innerHTML = data.content;
+                    editorLink.href = `/editor/${data.patent_id}`;
+                    resultDiv.style.display = 'block';
+                } else {
+                    throw new Error(data.detail || '生成に失敗しました');
+                }
+            } catch (error) {
+                errorDiv.textContent = `❌ エラー: ${error.message}`;
+                errorDiv.style.display = 'block';
+            } finally {
+                btnText.style.display = 'inline';
+                btnLoading.style.display = 'none';
+                generateBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+
+</html>

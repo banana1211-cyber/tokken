@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>特許明細書エディタ - Tokkyon</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+    <div class="editor-container">
+        <!-- ヘッダー -->
+        <header class="editor-header">
+            <div class="header-left">
+                <a href="/" class="back-link">← 戻る</a>
+                <h1>📄 特許明細書エディタ</h1>
+            </div>
+            <div class="header-right">
+                <button id="export-btn" class="btn btn-secondary">📥 HTMLエクスポート</button>
+            </div>
+        </header>
+
+        <!-- メインコンテンツ -->
+        <div class="editor-main">
+            <!-- 明細書本文 -->
+            <div class="document-panel">
+                <div id="document-content" class="document-content">
+                    <p class="loading">読み込み中...</p>
+                </div>
+            </div>
+
+            <!-- コメントパネル -->
+            <div class="comments-panel">
+                <div class="comments-header">
+                    <h2>💬 コメント</h2>
+                    <span id="comment-count" class="comment-count">0件</span>
+                </div>
+                <div id="comments-list" class="comments-list">
+                    <p class="no-comments">コメントはありません</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- コメント追加モーダル -->
+        <div id="comment-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>コメントを追加</h3>
+                    <button class="modal-close" id="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="selected-text-preview">
+                        <label>選択テキスト:</label>
+                        <p id="selected-text-display"></p>
+                    </div>
+                    <div class="form-group">
+                        <label for="comment-author">名前</label>
+                        <input type="text" id="comment-author" value="弁理士" placeholder="名前を入力">
+                    </div>
+                    <div class="form-group">
+                        <label for="comment-text">コメント</label>
+                        <textarea id="comment-text" rows="4" placeholder="コメントを入力..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button id="cancel-comment" class="btn btn-secondary">キャンセル</button>
+                    <button id="submit-comment" class="btn btn-primary">追加</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const patentId = '{{ patent_id }}';
+        let patentData = null;
+        let selectedRange = null;
+
+        // 初期化
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadPatent();
+            setupEventListeners();
+        });
+
+        // 明細書を読み込む
+        async function loadPatent() {
+            try {
+                const response = await fetch(`/api/patent/${patentId}`);
+                if (!response.ok) throw new Error('明細書が見つかりません');
+
+                patentData = await response.json();
+                renderDocument();
+                renderComments();
+            } catch (error) {
+                document.getElementById('document-content').innerHTML =
+                    `<p class="error">❌ ${error.message}</p>`;
+            }
+        }
+
+        // 明細書を表示
+        function renderDocument() {
+            const content = document.getElementById('document-content');
+            content.innerHTML = patentData.content;
+
+            // コメント付き箇所をハイライト
+            highlightCommentedText();
+        }
+
+        // コメント一覧を表示
+        function renderComments() {
+            const list = document.getElementById('comments-list');
+            const count = document.getElementById('comment-count');
+            const comments = patentData.comments || [];
+
+            count.textContent = `${comments.length}件`;
+
+            if (comments.length === 0) {
+                list.innerHTML = '<p class="no-comments">コメントはありません<br><small>テキストを選択してコメントを追加できます</small></p>';
+                return;
+            }
+
+            list.innerHTML = comments.map(comment => `
+                <div class="comment-card ${comment.resolved ? 'resolved' : ''}" data-comment-id="${comment.id}">
+                    <div class="comment-header">
+                        <span class="comment-author">${comment.author}</span>
+                        <span class="comment-time">${formatTime(comment.created_at)}</span>
+                    </div>
+                    ${comment.selected_text ? `<div class="comment-quote">"${truncate(comment.selected_text, 50)}"</div>` : ''}
+                    <div class="comment-text">${comment.text}</div>
+                    
+                    <!-- 返信 -->
+                    <div class="comment-replies">
+                        ${(comment.replies || []).map(reply => `
+                            <div class="reply">
+                                <span class="reply-author">${reply.author}</span>
+                                <span class="reply-time">${formatTime(reply.created_at)}</span>
+                                <p class="reply-text">${reply.text}</p>
+                            </div>
+                        `).join('')}
+                    </div>
+                    
+                    <!-- アクション -->
+                    <div class="comment-actions">
+                        <button class="btn-action reply-btn" data-comment-id="${comment.id}">↩️ 返信</button>
+                        <button class="btn-action resolve-btn" data-comment-id="${comment.id}">
+                            ${comment.resolved ? '🔄 未解決に戻す' : '✅ 解決済み'}
+                        </button>
+                    </div>
+                    
+                    <!-- 返信フォーム（非表示） -->
+                    <div class="reply-form" id="reply-form-${comment.id}" style="display: none;">
+                        <input type="text" class="reply-author-input" placeholder="名前" value="担当者">
+                        <textarea class="reply-text-input" rows="2" placeholder="返信を入力..."></textarea>
+                        <div class="reply-form-actions">
+                            <button class="btn btn-small btn-secondary cancel-reply-btn">キャンセル</button>
+                            <button class="btn btn-small btn-primary submit-reply-btn" data-comment-id="${comment.id}">送信</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            // イベントリスナー設定
+            setupCommentActions();
+        }
+
+        // コメント付きテキストをハイライト
+        function highlightCommentedText() {
+            // シンプルな実装：コメントがある場合は通知
+            const comments = patentData.comments || [];
+            if (comments.length > 0) {
+                console.log(`${comments.length}件のコメントがあります`);
+            }
+        }
+
+        // イベントリスナー設定
+        function setupEventListeners() {
+            // テキスト選択 → コメント追加
+            document.getElementById('document-content').addEventListener('mouseup', handleTextSelection);
+
+            // モーダル操作
+            document.getElementById('modal-close').addEventListener('click', closeModal);
+            document.getElementById('cancel-comment').addEventListener('click', closeModal);
+            document.getElementById('submit-comment').addEventListener('click', submitComment);
+
+            // エクスポート
+            document.getElementById('export-btn').addEventListener('click', exportHTML);
+        }
+
+        // テキスト選択ハンドラ
+        function handleTextSelection() {
+            const selection = window.getSelection();
+            const selectedText = selection.toString().trim();
+
+            if (selectedText.length > 0) {
+                selectedRange = {
+                    text: selectedText,
+                    start: 0,
+                    end: selectedText.length
+                };
+
+                document.getElementById('selected-text-display').textContent = truncate(selectedText, 100);
+                document.getElementById('comment-modal').style.display = 'flex';
+            }
+        }
+
+        // コメント送信
+        async function submitComment() {
+            const author = document.getElementById('comment-author').value;
+            const text = document.getElementById('comment-text').value;
+
+            if (!text.trim()) {
+                alert('コメントを入力してください');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/patent/${patentId}/comment`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        author,
+                        text,
+                        selected_text: selectedRange?.text || '',
+                        selection_start: selectedRange?.start || 0,
+                        selection_end: selectedRange?.end || 0
+                    })
+                });
+
+                if (response.ok) {
+                    await loadPatent();
+                    closeModal();
+                    document.getElementById('comment-text').value = '';
+                }
+            } catch (error) {
+                alert('コメントの追加に失敗しました');
+            }
+        }
+
+        // コメントアクション設定
+        function setupCommentActions() {
+            // 返信ボタン
+            document.querySelectorAll('.reply-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const commentId = btn.dataset.commentId;
+                    const form = document.getElementById(`reply-form-${commentId}`);
+                    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+                });
+            });
+
+            // 解決ボタン
+            document.querySelectorAll('.resolve-btn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const commentId = btn.dataset.commentId;
+                    const comment = patentData.comments.find(c => c.id === commentId);
+
+                    await fetch(`/api/patent/${patentId}/comment/${commentId}/resolve`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ resolved: !comment.resolved })
+                    });
+
+                    await loadPatent();
+                });
+            });
+
+            // 返信キャンセル
+            document.querySelectorAll('.cancel-reply-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.target.closest('.reply-form').style.display = 'none';
+                });
+            });
+
+            // 返信送信
+            document.querySelectorAll('.submit-reply-btn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const commentId = btn.dataset.commentId;
+                    const form = document.getElementById(`reply-form-${commentId}`);
+                    const author = form.querySelector('.reply-author-input').value;
+                    const text = form.querySelector('.reply-text-input').value;
+
+                    if (!text.trim()) return;
+
+                    await fetch(`/api/patent/${patentId}/comment/${commentId}/reply`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ author, text })
+                    });
+
+                    await loadPatent();
+                });
+            });
+        }
+
+        // モーダルを閉じる
+        function closeModal() {
+            document.getElementById('comment-modal').style.display = 'none';
+            selectedRange = null;
+        }
+
+        // HTMLエクスポート
+        function exportHTML() {
+            const content = patentData.content;
+            const blob = new Blob([`<!DOCTYPE html><html><head><meta charset="utf-8"><title>特許明細書</title></head><body>${content}</body></html>`], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `patent_${patentId}.html`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // ユーティリティ
+        function formatTime(isoString) {
+            const date = new Date(isoString);
+            return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`;
+        }
+
+        function truncate(text, maxLength) {
+            return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+        }
+    </script>
+</body>
+
+</html>

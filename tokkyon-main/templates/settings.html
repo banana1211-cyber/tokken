@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>設定 - Tokkyon</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>⚙️ 設定</h1>
+            <p class="subtitle"><a href="/" class="back-link">← トップページに戻る</a></p>
+        </header>
+
+        <main class="main">
+            <form id="settings-form" class="generate-form">
+                <div class="form-group">
+                    <label for="llm-provider">LLMプロバイダー</label>
+                    <select id="llm-provider" name="llm_provider">
+                        <option value="openai">OpenAI (GPT-4)</option>
+                        <option value="lmstudio">LMStudio (ローカル)</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="lmstudio-url-group">
+                    <label for="lmstudio-url">LMStudio URL</label>
+                    <input type="text" id="lmstudio-url" name="lmstudio_url" placeholder="http://localhost:1234/v1">
+                </div>
+
+                <div class="button-group">
+                    <button type="button" class="btn btn-secondary" id="test-btn">
+                        <span class="btn-text">🔌 接続テスト</span>
+                        <span class="btn-loading" style="display: none;">⏳ テスト中...</span>
+                    </button>
+                    <button type="submit" class="btn btn-primary" id="save-btn">
+                        <span class="btn-text">💾 保存</span>
+                        <span class="btn-loading" style="display: none;">⏳ 保存中...</span>
+                    </button>
+                </div>
+            </form>
+
+            <div id="test-result" class="test-result" style="display: none;"></div>
+            <div id="save-result" class="save-result" style="display: none;"></div>
+        </main>
+
+        <footer class="footer">
+            <p>Powered by FastAPI + LLM</p>
+        </footer>
+    </div>
+
+    <script>
+        const form = document.getElementById('settings-form');
+        const providerSelect = document.getElementById('llm-provider');
+        const lmstudioUrlGroup = document.getElementById('lmstudio-url-group');
+        const lmstudioUrlInput = document.getElementById('lmstudio-url');
+        const testBtn = document.getElementById('test-btn');
+        const saveBtn = document.getElementById('save-btn');
+        const testResult = document.getElementById('test-result');
+        const saveResult = document.getElementById('save-result');
+
+        // プロバイダー変更時にLMStudio URL欄の表示を切り替え
+        function updateUrlVisibility() {
+            lmstudioUrlGroup.style.display = providerSelect.value === 'lmstudio' ? 'block' : 'none';
+        }
+        providerSelect.addEventListener('change', updateUrlVisibility);
+
+        // 現在の設定を読み込む
+        async function loadSettings() {
+            try {
+                const response = await fetch('/api/settings');
+                const data = await response.json();
+                providerSelect.value = data.llm_provider || 'openai';
+                lmstudioUrlInput.value = data.lmstudio_url || 'http://localhost:1234/v1';
+                updateUrlVisibility();
+            } catch (error) {
+                console.error('設定の読み込みに失敗:', error);
+            }
+        }
+
+        // 接続テスト
+        testBtn.addEventListener('click', async () => {
+            const btnText = testBtn.querySelector('.btn-text');
+            const btnLoading = testBtn.querySelector('.btn-loading');
+
+            btnText.style.display = 'none';
+            btnLoading.style.display = 'inline';
+            testBtn.disabled = true;
+            testResult.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/settings/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        provider: providerSelect.value,
+                        lmstudio_url: lmstudioUrlInput.value
+                    })
+                });
+
+                const data = await response.json();
+                testResult.className = 'test-result ' + (data.success ? 'success' : 'error');
+                testResult.textContent = (data.success ? '✅ ' : '❌ ') + data.message;
+                testResult.style.display = 'block';
+            } catch (error) {
+                testResult.className = 'test-result error';
+                testResult.textContent = '❌ 接続エラー: ' + error.message;
+                testResult.style.display = 'block';
+            } finally {
+                btnText.style.display = 'inline';
+                btnLoading.style.display = 'none';
+                testBtn.disabled = false;
+            }
+        });
+
+        // 設定保存
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const btnText = saveBtn.querySelector('.btn-text');
+            const btnLoading = saveBtn.querySelector('.btn-loading');
+
+            btnText.style.display = 'none';
+            btnLoading.style.display = 'inline';
+            saveBtn.disabled = true;
+            saveResult.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        llm_provider: providerSelect.value,
+                        lmstudio_url: lmstudioUrlInput.value
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    saveResult.className = 'save-result success';
+                    saveResult.textContent = '✅ ' + data.message;
+                } else {
+                    throw new Error(data.detail || '保存に失敗しました');
+                }
+                saveResult.style.display = 'block';
+            } catch (error) {
+                saveResult.className = 'save-result error';
+                saveResult.textContent = '❌ エラー: ' + error.message;
+                saveResult.style.display = 'block';
+            } finally {
+                btnText.style.display = 'inline';
+                btnLoading.style.display = 'none';
+                saveBtn.disabled = false;
+            }
+        });
+
+        // 初期化
+        loadSettings();
+    </script>
+</body>
+
+</html>
