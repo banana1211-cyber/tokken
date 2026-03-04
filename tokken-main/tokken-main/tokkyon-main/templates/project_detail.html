@@ -361,18 +361,39 @@
             setTimeout(() => { msg.textContent = ''; }, 3000);
         });
 
-        // AI明細書生成ボタン（ヒアリングシートを保存してから生成ページへ）
+        // AI明細書生成ボタン（ヒアリングシートを保存→project_id付きで直接生成）
         document.getElementById('hearing-generate-btn').addEventListener('click', async () => {
+            // まずヒアリングシートを保存
             document.getElementById('hearing-save-btn').click();
-            // 既存のリポジトリURLを取得してトップページの生成フォームへ
+            // 少し待ってから生成（保存完了を待つ）
+            await new Promise(r => setTimeout(r, 500));
+
             const projRes = await fetch(`/api/projects/${projectId}`);
-            if (projRes.ok) {
-                const proj = await projRes.json();
-                if (proj.github_repo_url) {
-                    window.location.href = `/?repo_url=${encodeURIComponent(proj.github_repo_url)}`;
-                } else {
-                    window.location.href = '/';
-                }
+            if (!projRes.ok) { alert('案件情報の取得に失敗しました'); return; }
+            const proj = await projRes.json();
+            if (!proj.github_repo_url) { alert('GitHubリポジトリURLが設定されていません'); return; }
+
+            const msg = document.getElementById('hearing-save-msg');
+            msg.textContent = '🤖 AI明細書生成中...';
+
+            try {
+                const res = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        repo_url: proj.github_repo_url,
+                        applicant: proj.customer_name || '出願人',
+                        project_id: projectId
+                    })
+                });
+                if (!res.ok) throw new Error(await res.text());
+                const data = await res.json();
+                msg.textContent = '✅ 生成完了！エディタに移動します...';
+                setTimeout(() => {
+                    window.location.href = `/editor/${data.patent_id}`;
+                }, 1000);
+            } catch (e) {
+                msg.textContent = `❌ 生成失敗: ${e.message}`;
             }
         });
 

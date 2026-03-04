@@ -14,7 +14,7 @@ from services.github_client import GitHubClient
 from services.patent_generator import PatentGenerator
 from logging_config import logger
 from database import get_db
-from models import Project, PatentDraft
+from models import Project, PatentDraft, HearingSheet
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 
@@ -29,6 +29,7 @@ class GenerateRequest(BaseModel):
     repo_url: str
     applicant: str = "出願人"
     llm_provider: str = "openai"  # "openai" or "lmstudio"
+    project_id: Optional[str] = None  # ヒアリングシート取得用
 
 
 class CommentRequest(BaseModel):
@@ -94,7 +95,27 @@ async def generate_patent(request: GenerateRequest, db: Session = Depends(get_db
         repo_info = await github_client.analyze_repository(request.repo_url)
         logger.debug(f"リポジトリ情報: {repo_info.get('name')}, 言語: {repo_info.get('language')}")
         logger.info("リポジトリ解析完了")
-        
+
+        # ヒアリングシートを取得してrepo_infoに追加
+        hearing_data = None
+        if request.project_id:
+            sheet = (
+                db.query(HearingSheet)
+                .filter(HearingSheet.project_id == request.project_id)
+                .order_by(HearingSheet.updated_at.desc())
+                .first()
+            )
+            if sheet:
+                hearing_data = {
+                    "patent_name": sheet.patent_name,
+                    "problem_to_solve": sheet.problem_to_solve,
+                    "existing_tech_problems": sheet.existing_tech_problems,
+                    "composition": sheet.composition,
+                    "features": sheet.features,
+                }
+                repo_info["hearing"] = hearing_data
+                logger.info("ヒアリングシートをプロンプトに追加")
+
         # LLMで明細書生成
         logger.info(f"LLM ({request.llm_provider}) で明細書生成中...")
         llm = LLMService(provider=request.llm_provider)

@@ -55,8 +55,20 @@ class LLMService:
     def _build_prompt(self, repo_info: dict) -> str:
         """明細書生成プロンプトを構築"""
 
-        return f"""以下のリポジトリ情報を基に、日本特許庁(JPO)形式の特許明細書をHTML形式で生成してください。
+        hearing = repo_info.get("hearing")
+        hearing_section = ""
+        if hearing:
+            hearing_section = f"""
+【ヒアリングシート情報】（最優先で参照してください）
+- 発明の名称: {hearing.get('patent_name') or 'なし'}
+- 解決しようとする課題: {hearing.get('problem_to_solve') or 'なし'}
+- 既存技術の問題点: {hearing.get('existing_tech_problems') or 'なし'}
+- 発明の構成: {hearing.get('composition') or 'なし'}
+- 発明の特徴・効果: {hearing.get('features') or 'なし'}
+"""
 
+        return f"""以下の情報を基に、日本特許庁(JPO)形式の特許明細書をHTML形式で生成してください。
+{hearing_section}
 【リポジトリ情報】
 - リポジトリ名: {repo_info.get('name', 'Unknown')}
 - 説明: {repo_info.get('description', 'なし')}
