@@ -45,7 +45,14 @@ class LLMService:
             max_tokens=4000
         )
 
-        return response.choices[0].message.content
+        content = response.choices[0].message.content.strip()
+        if content.startswith("```html"):
+            content = content[7:]
+        elif content.startswith("```"):
+            content = content[3:]
+        if content.endswith("```"):
+            content = content[:-3]
+        return content.strip()
 
     def _build_prompt(self, repo_info: dict) -> str:
         """明細書生成プロンプトを構築"""
