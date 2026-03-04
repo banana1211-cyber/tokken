@@ -18,9 +18,16 @@ class PatentGenerator:
     def __init__(self):
         self.data_dir = DATA_DIR
     
+    def _safe_path(self, patent_id: str) -> Path | None:
+        """パストラバーサル対策: data_dir 外のパスは None を返す"""
+        resolved = (self.data_dir / f"{patent_id}.json").resolve()
+        if not resolved.is_relative_to(self.data_dir.resolve()):
+            return None
+        return resolved
+
     def save_patent(self, patent_id: str, content: str, repo_url: str) -> dict:
         """生成した明細書を保存"""
-        
+
         patent_data = {
             "id": patent_id,
             "repo_url": repo_url,
@@ -29,20 +36,22 @@ class PatentGenerator:
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat()
         }
-        
-        file_path = self.data_dir / f"{patent_id}.json"
+
+        file_path = self._safe_path(patent_id)
+        if file_path is None:
+            raise ValueError(f"Invalid patent ID: {patent_id}")
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(patent_data, f, ensure_ascii=False, indent=2)
-        
+
         return patent_data
-    
+
     def get_patent(self, patent_id: str) -> dict | None:
         """明細書を取得"""
-        
-        file_path = self.data_dir / f"{patent_id}.json"
-        if not file_path.exists():
+
+        file_path = self._safe_path(patent_id)
+        if file_path is None or not file_path.exists():
             return None
-        
+
         with open(file_path, "r", encoding="utf-8") as f:
             return json.load(f)
     
@@ -111,7 +120,9 @@ class PatentGenerator:
     
     def _save(self, patent: dict):
         """明細書データを保存"""
-        file_path = self.data_dir / f"{patent['id']}.json"
+        file_path = self._safe_path(patent["id"])
+        if file_path is None:
+            raise ValueError(f"Invalid patent ID: {patent['id']}")
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(patent, f, ensure_ascii=False, indent=2)
     

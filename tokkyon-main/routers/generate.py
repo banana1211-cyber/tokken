@@ -82,7 +82,7 @@ async def generate_patent(request: GenerateRequest):
         
     except Exception as e:
         logger.error(f"エラー発生: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="明細書の生成中にエラーが発生しました")
 
 
 @router.get("/patent/{patent_id}")
