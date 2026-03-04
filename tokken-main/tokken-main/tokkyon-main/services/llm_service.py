@@ -21,7 +21,7 @@ class LLMService:
             if not api_key:
                 raise ValueError("OPENAI_API_KEY が設定されていません。環境変数を確認してください。")
             self.client = OpenAI(api_key=api_key)
-            self.model = "gpt-4o"
+            self.model = "gpt-5"
         elif self.provider == "lmstudio":
             self.client = OpenAI(base_url=config.LMSTUDIO_URL, api_key="lm-studio")
             self.model = "local-model"

@@ -61,12 +61,12 @@ async def test_connection(req: TestRequest):
             logger.debug("OpenAI APIに接続中...")
             client = OpenAI(api_key=api_key)
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-5",
                 messages=[{"role": "user", "content": "Hello"}],
                 max_tokens=5
             )
             logger.info("OpenAI 接続成功")
-            return {"success": True, "message": "OpenAI 接続成功 (モデル: gpt-4o)"}
+            return {"success": True, "message": "OpenAI 接続成功 (モデル: gpt-5)"}
 
         elif req.provider == "lmstudio":
             logger.debug(f"LMStudio ({req.lmstudio_url}) に接続中...")
