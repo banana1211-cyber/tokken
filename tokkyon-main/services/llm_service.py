@@ -25,7 +25,7 @@ class LLMService:
             self.model = "gpt-5"
         elif self.provider == "lmstudio":
             self.client = OpenAI(base_url=config.LMSTUDIO_URL, api_key="lm-studio")
-            self.model = "local-model"
+            self.model = os.getenv("LMSTUDIO_MODEL", "local-model")
         else:
             raise ValueError(f"Unknown LLM provider: {self.provider}")
 
