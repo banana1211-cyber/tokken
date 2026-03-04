@@ -134,19 +134,25 @@ async def generate_patent(request: GenerateRequest, db: Session = Depends(get_db
         patent = patent_generator.save_patent(patent_id, full_content, request.repo_url)
         logger.info(f"=== 明細書生成完了 (ID: {patent_id}) ===")
 
-        # DBにProject + PatentDraftを登録
+        # DBにPatentDraftを登録（既存プロジェクトがあればそこに紐付け）
         try:
-            project = Project(
-                github_repo_url=request.repo_url,
-                customer_name=repo_info.get("name"),
-                status="draft"
-            )
-            db.add(project)
-            db.flush()  # project.id を確定させる
+            if request.project_id:
+                # 既存プロジェクトに紐付ける
+                linked_project_id = request.project_id
+            else:
+                # 新規プロジェクトを作成
+                project = Project(
+                    github_repo_url=request.repo_url,
+                    customer_name=repo_info.get("name"),
+                    status="draft"
+                )
+                db.add(project)
+                db.flush()
+                linked_project_id = project.id
 
             draft = PatentDraft(
                 id=patent_id,
-                project_id=project.id,
+                project_id=linked_project_id,
                 version=1,
                 generated_by="ai",
                 content=full_content
@@ -155,17 +161,16 @@ async def generate_patent(request: GenerateRequest, db: Session = Depends(get_db
             db.commit()
 
             # JSONにproject_idを追記
-            patent_generator.update_project_id(patent_id, project.id)
-            project_id = project.id
+            patent_generator.update_project_id(patent_id, linked_project_id)
         except Exception as e:
             logger.warning(f"DB登録スキップ: {e}")
             db.rollback()
-            project_id = None
+            linked_project_id = None
 
         return {
             "success": True,
             "patent_id": patent_id,
-            "project_id": project_id,
+            "project_id": linked_project_id,
             "content": full_content
         }
         
