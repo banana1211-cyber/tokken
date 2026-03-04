@@ -1,6 +1,7 @@
 """
 LLM Service - OpenAI / LMStudio 切り替え対応
 """
+import asyncio
 import os
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -28,12 +29,13 @@ class LLMService:
         else:
             raise ValueError(f"Unknown LLM provider: {self.provider}")
 
-    def generate_patent_spec(self, repo_info: dict) -> str:
+    async def generate_patent_spec(self, repo_info: dict) -> str:
         """リポジトリ情報から特許明細書を生成"""
 
         prompt = self._build_prompt(repo_info)
 
-        response = self.client.chat.completions.create(
+        response = await asyncio.to_thread(
+            self.client.chat.completions.create,
             model=self.model,
             messages=[
                 {"role": "system", "content": "あなたは弁理士補助エンジニアです。日本特許庁(JPO)形式の特許明細書を生成します。"},

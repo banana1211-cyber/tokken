@@ -59,7 +59,7 @@ async def generate_patent(request: GenerateRequest):
         # LLMで明細書生成
         logger.info(f"LLM ({request.llm_provider}) で明細書生成中...")
         llm = LLMService(provider=request.llm_provider)
-        content = llm.generate_patent_spec(repo_info)
+        content = await llm.generate_patent_spec(repo_info)
         logger.info(f"明細書生成完了 (文字数: {len(content)})")
         
         # 図面HTML追加
