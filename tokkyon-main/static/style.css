@@ -613,6 +613,71 @@ body {
 }
 
 /* ========================================
+   印刷 / PDF出力
+   ======================================== */
+
+@media print {
+    /* UIクロムを非表示 */
+    .editor-header,
+    .comments-panel {
+        display: none !important;
+    }
+
+    /* ドキュメントパネルを全幅に */
+    .editor-container,
+    .editor-main {
+        display: block;
+        height: auto;
+        overflow: visible;
+    }
+
+    .document-panel {
+        overflow: visible;
+        padding: 0;
+    }
+
+    /* 本文スタイルをリセット */
+    .document-content {
+        max-width: 100%;
+        margin: 0;
+        padding: 0;
+        box-shadow: none;
+        border-radius: 0;
+    }
+
+    /* セクション単位でページ分割を制御 */
+    .patent-section {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    /* 見出し直後で分割しない */
+    h1, h2, h3, h4 {
+        break-after: avoid;
+        page-break-after: avoid;
+    }
+
+    /* テーブル・図面は分割しない */
+    table, figure, .figure {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    /* 請求項・要約書は新ページから */
+    .patent-section#section-10,
+    .patent-section#section-11 {
+        break-before: page;
+        page-break-before: always;
+    }
+
+    /* 印刷時はリンク装飾を消す */
+    a {
+        text-decoration: none;
+        color: inherit;
+    }
+}
+
+/* ========================================
    設定ページ
    ======================================== */
 

@@ -297,10 +297,27 @@
             selectedRange = null;
         }
 
-        // HTMLエクスポート
+        // HTMLエクスポート（印刷用CSS込み）
         function exportHTML() {
             const content = patentData.content;
-            const blob = new Blob([`<!DOCTYPE html><html><head><meta charset="utf-8"><title>特許明細書</title></head><body>${content}</body></html>`], { type: 'text/html' });
+            const printCSS = `
+                body { font-family: 'Hiragino Sans', 'Yu Gothic', sans-serif; color: #1a1a2e; margin: 2cm; }
+                .patent-section { break-inside: avoid; page-break-inside: avoid; margin-bottom: 2rem; }
+                h1, h2, h3, h4 { break-after: avoid; page-break-after: avoid; margin-top: 1.5rem; margin-bottom: 0.75rem; }
+                table, figure { break-inside: avoid; page-break-inside: avoid; }
+                .patent-section#section-10, .patent-section#section-11 { break-before: page; page-break-before: always; }
+                p { margin-bottom: 1rem; line-height: 1.8; }
+            `;
+            const html = `<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>特許明細書</title>
+  <style>${printCSS}</style>
+</head>
+<body>${content}</body>
+</html>`;
+            const blob = new Blob([html], { type: 'text/html' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
