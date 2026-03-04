@@ -616,6 +616,11 @@ body {
    印刷 / PDF出力
    ======================================== */
 
+@page {
+    size: A4 portrait;
+    margin: 2cm;
+}
+
 @media print {
     /* UIクロムを非表示 */
     .editor-header,
@@ -632,6 +637,9 @@ body {
     }
 
     .document-panel {
+        display: block;
+        flex: none;
+        width: 100%;
         overflow: visible;
         padding: 0;
     }
@@ -639,16 +647,18 @@ body {
     /* 本文スタイルをリセット */
     .document-content {
         max-width: 100%;
+        width: 100%;
         margin: 0;
         padding: 0;
+        min-height: 0;
+        height: auto;
         box-shadow: none;
         border-radius: 0;
     }
 
-    /* セクション単位でページ分割を制御 */
+    /* セクションは分割を許可（長い章に対応） */
     .patent-section {
-        break-inside: avoid;
-        page-break-inside: avoid;
+        margin-bottom: 1rem;
     }
 
     /* 見出し直後で分割しない */
