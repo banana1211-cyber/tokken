@@ -324,9 +324,9 @@
         }
 
         // ヒアリングシート保存
-        document.getElementById('hearing-save-btn').addEventListener('click', async () => {
-            const sheetId = document.getElementById('hearing-save-btn').dataset.sheetId;
-            const msg = document.getElementById('hearing-save-msg');
+        async function saveHearingSheet() {
+            const btn = document.getElementById('hearing-save-btn');
+            const sheetId = btn.dataset.sheetId;
             const payload = {
                 project_id: projectId,
                 patent_name: document.getElementById('hs-patent-name').value,
@@ -339,14 +339,12 @@
 
             let res;
             if (sheetId) {
-                // 既存シートを更新
                 res = await fetch(`/api/hearing-sheets/${sheetId}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
             } else {
-                // 新規作成
                 res = await fetch('/api/hearing-sheets/', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -354,19 +352,23 @@
                 });
                 if (res.ok) {
                     const created = await res.json();
-                    document.getElementById('hearing-save-btn').dataset.sheetId = created.id;
+                    btn.dataset.sheetId = created.id;
                 }
             }
+            return res;
+        }
+
+        document.getElementById('hearing-save-btn').addEventListener('click', async () => {
+            const msg = document.getElementById('hearing-save-msg');
+            const res = await saveHearingSheet();
             msg.textContent = res.ok ? '✅ 保存しました' : '❌ 保存に失敗しました';
             setTimeout(() => { msg.textContent = ''; }, 3000);
         });
 
         // AI明細書生成ボタン（ヒアリングシートを保存→project_id付きで直接生成）
         document.getElementById('hearing-generate-btn').addEventListener('click', async () => {
-            // まずヒアリングシートを保存
-            document.getElementById('hearing-save-btn').click();
-            // 少し待ってから生成（保存完了を待つ）
-            await new Promise(r => setTimeout(r, 500));
+            // まずヒアリングシートを確実に保存してから生成
+            await saveHearingSheet();
 
             const projRes = await fetch(`/api/projects/${projectId}`);
             if (!projRes.ok) { alert('案件情報の取得に失敗しました'); return; }
