@@ -98,6 +98,39 @@
             padding: 2.5rem 1rem;
             color: var(--muted);
         }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.85rem;
+            color: var(--muted);
+            margin-bottom: 0.35rem;
+        }
+
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            background: var(--surface-hover);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.5rem 0.75rem;
+            color: var(--text);
+            font-size: 0.9rem;
+            box-sizing: border-box;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--primary, #6366f1);
+        }
     </style>
 </head>
 
@@ -123,6 +156,42 @@
 
             <div id="project-info" class="info-card">
                 <div class="empty-state">⏳ 読み込み中...</div>
+            </div>
+
+            <!-- ヒアリングシート -->
+            <h3 style="margin-bottom:1rem;">📝 ヒアリングシート</h3>
+            <div class="info-card">
+                <form id="hearing-form">
+                    <div class="form-group">
+                        <label for="hs-patent-name">発明の名称</label>
+                        <input type="text" id="hs-patent-name" placeholder="例：〇〇を用いた△△システム">
+                    </div>
+                    <div class="form-group">
+                        <label for="hs-problem">解決しようとする課題</label>
+                        <textarea id="hs-problem" rows="3" placeholder="従来技術の問題点、発明で解決したい課題を記載してください"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="hs-existing">既存技術・先行技術の問題点</label>
+                        <textarea id="hs-existing" rows="3" placeholder="既存の類似技術とその限界を記載してください"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="hs-composition">発明の構成</label>
+                        <textarea id="hs-composition" rows="4" placeholder="発明を構成する要素・仕組みを記載してください"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="hs-features">発明の特徴・効果</label>
+                        <textarea id="hs-features" rows="3" placeholder="従来技術と比較した際の優位性・効果を記載してください"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="hs-deadline">出願希望日</label>
+                        <input type="date" id="hs-deadline">
+                    </div>
+                    <div style="display:flex; gap:0.75rem; justify-content:flex-end; margin-top:1rem;">
+                        <button type="button" id="hearing-save-btn" class="btn btn-primary">💾 保存</button>
+                        <button type="button" id="hearing-generate-btn" class="btn btn-secondary">🤖 AI明細書生成</button>
+                    </div>
+                    <p id="hearing-save-msg" style="text-align:right; font-size:0.85rem; margin-top:0.5rem; color:var(--muted);"></p>
+                </form>
             </div>
 
             <h3 style="margin-bottom:1rem;">🗂️ バージョン履歴</h3>
@@ -235,7 +304,80 @@
                 .replace(/"/g, '&quot;');
         }
 
+        // ヒアリングシート読み込み
+        async function loadHearingSheet() {
+            const res = await fetch(`/api/hearing-sheets/?project_id=${projectId}`);
+            if (!res.ok) return;
+            const sheets = await res.json();
+            if (sheets.length === 0) return;
+            const s = sheets[sheets.length - 1]; // 最新
+            document.getElementById('hs-patent-name').value = s.patent_name || '';
+            document.getElementById('hs-problem').value = s.problem_to_solve || '';
+            document.getElementById('hs-existing').value = s.existing_tech_problems || '';
+            document.getElementById('hs-composition').value = s.composition || '';
+            document.getElementById('hs-features').value = s.features || '';
+            if (s.deadline) {
+                document.getElementById('hs-deadline').value = s.deadline.split('T')[0];
+            }
+            // シートIDを保持してPATCH用に使う
+            document.getElementById('hearing-save-btn').dataset.sheetId = s.id;
+        }
+
+        // ヒアリングシート保存
+        document.getElementById('hearing-save-btn').addEventListener('click', async () => {
+            const sheetId = document.getElementById('hearing-save-btn').dataset.sheetId;
+            const msg = document.getElementById('hearing-save-msg');
+            const payload = {
+                project_id: projectId,
+                patent_name: document.getElementById('hs-patent-name').value,
+                problem_to_solve: document.getElementById('hs-problem').value,
+                existing_tech_problems: document.getElementById('hs-existing').value,
+                composition: document.getElementById('hs-composition').value,
+                features: document.getElementById('hs-features').value,
+                deadline: document.getElementById('hs-deadline').value || null,
+            };
+
+            let res;
+            if (sheetId) {
+                // 既存シートを更新
+                res = await fetch(`/api/hearing-sheets/${sheetId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+            } else {
+                // 新規作成
+                res = await fetch('/api/hearing-sheets/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (res.ok) {
+                    const created = await res.json();
+                    document.getElementById('hearing-save-btn').dataset.sheetId = created.id;
+                }
+            }
+            msg.textContent = res.ok ? '✅ 保存しました' : '❌ 保存に失敗しました';
+            setTimeout(() => { msg.textContent = ''; }, 3000);
+        });
+
+        // AI明細書生成ボタン（ヒアリングシートを保存してから生成ページへ）
+        document.getElementById('hearing-generate-btn').addEventListener('click', async () => {
+            document.getElementById('hearing-save-btn').click();
+            // 既存のリポジトリURLを取得してトップページの生成フォームへ
+            const projRes = await fetch(`/api/projects/${projectId}`);
+            if (projRes.ok) {
+                const proj = await projRes.json();
+                if (proj.github_repo_url) {
+                    window.location.href = `/?repo_url=${encodeURIComponent(proj.github_repo_url)}`;
+                } else {
+                    window.location.href = '/';
+                }
+            }
+        });
+
         load();
+        loadHearingSheet();
     </script>
 </body>
 

@@ -15,6 +15,7 @@ from routers.projects import router as projects_router
 from routers.patent_drafts import router as patent_drafts_router
 from routers.hearing_sheets import router as hearing_sheets_router
 from routers.files import router as files_router
+from routers.comments import router as comments_router
 from database import engine
 import models
 
@@ -50,6 +51,7 @@ app.include_router(projects_router)
 app.include_router(patent_drafts_router)
 app.include_router(hearing_sheets_router)
 app.include_router(files_router)
+app.include_router(comments_router)
 
 
 @app.get("/health")

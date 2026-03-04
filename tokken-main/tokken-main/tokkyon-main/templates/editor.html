@@ -118,44 +118,63 @@
 
     <script>
         const patentId = '{{ patent_id }}';
-        let patentData = null;
+        let patentContent = '';
+        let comments = [];
         let selectedRange = null;
 
         // 初期化
         document.addEventListener('DOMContentLoaded', async () => {
             await loadPatent();
+            await loadComments();
             setupEventListeners();
         });
 
-        // 明細書を読み込む
+        // 明細書本文をDBから読み込み（フォールバック: JSONファイル）
         async function loadPatent() {
             try {
-                const response = await fetch(`/api/patent/${patentId}`);
-                if (!response.ok) throw new Error('明細書が見つかりません');
-
-                patentData = await response.json();
+                // まずDBのpatent_draftsから取得
+                const dbRes = await fetch(`/api/patent-drafts/${patentId}`);
+                if (dbRes.ok) {
+                    const draft = await dbRes.json();
+                    patentContent = draft.content || '';
+                } else {
+                    // フォールバック: 従来のJSONベースAPI
+                    const jsonRes = await fetch(`/api/patent/${patentId}`);
+                    if (!jsonRes.ok) throw new Error('明細書が見つかりません');
+                    const data = await jsonRes.json();
+                    patentContent = data.content || '';
+                }
                 renderDocument();
-                renderComments();
             } catch (error) {
                 document.getElementById('document-content').innerHTML =
                     `<p class="error">❌ ${error.message}</p>`;
             }
         }
 
+        // コメント一覧をDBから読み込み
+        async function loadComments() {
+            try {
+                const res = await fetch(`/api/comments/?draft_id=${patentId}`);
+                if (res.ok) {
+                    comments = await res.json();
+                } else {
+                    comments = [];
+                }
+            } catch {
+                comments = [];
+            }
+            renderComments();
+        }
+
         // 明細書を表示
         function renderDocument() {
-            const content = document.getElementById('document-content');
-            content.innerHTML = patentData.content;
-
-            // コメント付き箇所をハイライト
-            highlightCommentedText();
+            document.getElementById('document-content').innerHTML = patentContent;
         }
 
         // コメント一覧を表示
         function renderComments() {
             const list = document.getElementById('comments-list');
             const count = document.getElementById('comment-count');
-            const comments = patentData.comments || [];
 
             count.textContent = `${comments.length}件`;
 
@@ -167,31 +186,31 @@
             list.innerHTML = comments.map(comment => `
                 <div class="comment-card ${comment.resolved ? 'resolved' : ''}" data-comment-id="${comment.id}">
                     <div class="comment-header">
-                        <span class="comment-author">${comment.author}</span>
+                        <span class="comment-author">${escHtml(comment.author || '弁理士')}</span>
                         <span class="comment-time">${formatTime(comment.created_at)}</span>
                     </div>
-                    ${comment.selected_text ? `<div class="comment-quote">"${truncate(comment.selected_text, 50)}"</div>` : ''}
-                    <div class="comment-text">${comment.text}</div>
-                    
+                    ${comment.selected_text ? `<div class="comment-quote">"${escHtml(truncate(comment.selected_text, 50))}"</div>` : ''}
+                    <div class="comment-text">${escHtml(comment.text)}</div>
+
                     <!-- 返信 -->
                     <div class="comment-replies">
                         ${(comment.replies || []).map(reply => `
                             <div class="reply">
-                                <span class="reply-author">${reply.author}</span>
+                                <span class="reply-author">${escHtml(reply.author || '担当者')}</span>
                                 <span class="reply-time">${formatTime(reply.created_at)}</span>
-                                <p class="reply-text">${reply.text}</p>
+                                <p class="reply-text">${escHtml(reply.text)}</p>
                             </div>
                         `).join('')}
                     </div>
-                    
+
                     <!-- アクション -->
                     <div class="comment-actions">
                         <button class="btn-action reply-btn" data-comment-id="${comment.id}">↩️ 返信</button>
-                        <button class="btn-action resolve-btn" data-comment-id="${comment.id}">
+                        <button class="btn-action resolve-btn" data-comment-id="${comment.id}" data-resolved="${comment.resolved}">
                             ${comment.resolved ? '🔄 未解決に戻す' : '✅ 解決済み'}
                         </button>
                     </div>
-                    
+
                     <!-- 返信フォーム（非表示） -->
                     <div class="reply-form" id="reply-form-${comment.id}" style="display: none;">
                         <input type="text" class="reply-author-input" placeholder="名前" value="担当者">
@@ -204,38 +223,19 @@
                 </div>
             `).join('');
 
-            // イベントリスナー設定
             setupCommentActions();
-        }
-
-        // コメント付きテキストをハイライト
-        function highlightCommentedText() {
-            // シンプルな実装：コメントがある場合は通知
-            const comments = patentData.comments || [];
-            if (comments.length > 0) {
-                console.log(`${comments.length}件のコメントがあります`);
-            }
         }
 
         // イベントリスナー設定
         function setupEventListeners() {
-            // テキスト選択 → コメント追加
             document.getElementById('document-content').addEventListener('mouseup', handleTextSelection);
-
-            // モーダル操作
             document.getElementById('modal-close').addEventListener('click', closeModal);
             document.getElementById('cancel-comment').addEventListener('click', closeModal);
             document.getElementById('submit-comment').addEventListener('click', submitComment);
-
-            // エクスポート
             document.getElementById('export-btn').addEventListener('click', exportHTML);
-
-            // 編集ボタン
             document.getElementById('edit-btn').addEventListener('click', enterEditMode);
             document.getElementById('save-btn').addEventListener('click', saveVersion);
             document.getElementById('cancel-edit-btn').addEventListener('click', exitEditMode);
-
-            // PDF保存
             document.getElementById('print-btn').addEventListener('click', () => window.print());
         }
 
@@ -243,34 +243,25 @@
         function handleTextSelection() {
             const selection = window.getSelection();
             const selectedText = selection.toString().trim();
-
             if (selectedText.length > 0) {
-                selectedRange = {
-                    text: selectedText,
-                    start: 0,
-                    end: selectedText.length
-                };
-
+                selectedRange = { text: selectedText, start: 0, end: selectedText.length };
                 document.getElementById('selected-text-display').textContent = truncate(selectedText, 100);
                 document.getElementById('comment-modal').style.display = 'flex';
             }
         }
 
-        // コメント送信
+        // コメント送信（DBへ保存）
         async function submitComment() {
             const author = document.getElementById('comment-author').value;
             const text = document.getElementById('comment-text').value;
-
-            if (!text.trim()) {
-                alert('コメントを入力してください');
-                return;
-            }
+            if (!text.trim()) { alert('コメントを入力してください'); return; }
 
             try {
-                const response = await fetch(`/api/patent/${patentId}/comment`, {
+                const res = await fetch('/api/comments/', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
+                        draft_id: patentId,
                         author,
                         text,
                         selected_text: selectedRange?.text || '',
@@ -278,15 +269,12 @@
                         selection_end: selectedRange?.end || 0
                     })
                 });
-
-                if (response.ok) {
-                    await loadPatent();
+                if (res.ok) {
+                    await loadComments();
                     closeModal();
                     document.getElementById('comment-text').value = '';
                 }
-            } catch (error) {
-                alert('コメントの追加に失敗しました');
-            }
+            } catch { alert('コメントの追加に失敗しました'); }
         }
 
         // コメントアクション設定
@@ -294,25 +282,22 @@
             // 返信ボタン
             document.querySelectorAll('.reply-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    const commentId = btn.dataset.commentId;
-                    const form = document.getElementById(`reply-form-${commentId}`);
+                    const form = document.getElementById(`reply-form-${btn.dataset.commentId}`);
                     form.style.display = form.style.display === 'none' ? 'block' : 'none';
                 });
             });
 
-            // 解決ボタン
+            // 解決ボタン（DB更新）
             document.querySelectorAll('.resolve-btn').forEach(btn => {
                 btn.addEventListener('click', async () => {
                     const commentId = btn.dataset.commentId;
-                    const comment = patentData.comments.find(c => c.id === commentId);
-
-                    await fetch(`/api/patent/${patentId}/comment/${commentId}/resolve`, {
+                    const currentResolved = btn.dataset.resolved === 'true';
+                    await fetch(`/api/comments/${commentId}/resolve`, {
                         method: 'PATCH',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ resolved: !comment.resolved })
+                        body: JSON.stringify({ resolved: !currentResolved })
                     });
-
-                    await loadPatent();
+                    await loadComments();
                 });
             });
 
@@ -323,23 +308,26 @@
                 });
             });
 
-            // 返信送信
+            // 返信送信（DBへ保存）
             document.querySelectorAll('.submit-reply-btn').forEach(btn => {
                 btn.addEventListener('click', async () => {
                     const commentId = btn.dataset.commentId;
                     const form = document.getElementById(`reply-form-${commentId}`);
                     const author = form.querySelector('.reply-author-input').value;
                     const text = form.querySelector('.reply-text-input').value;
-
                     if (!text.trim()) return;
 
-                    await fetch(`/api/patent/${patentId}/comment/${commentId}/reply`, {
+                    await fetch('/api/comments/', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ author, text })
+                        body: JSON.stringify({
+                            draft_id: patentId,
+                            author,
+                            text,
+                            parent_comment_id: commentId
+                        })
                     });
-
-                    await loadPatent();
+                    await loadComments();
                 });
             });
         }
@@ -366,7 +354,7 @@
             const content = document.getElementById('document-content');
             content.contentEditable = 'false';
             content.style.outline = '';
-            renderDocument();  // 元に戻す
+            renderDocument();
             document.getElementById('edit-btn').style.display = 'inline-flex';
             document.getElementById('save-btn').style.display = 'none';
             document.getElementById('cancel-edit-btn').style.display = 'none';
@@ -382,18 +370,18 @@
                     body: JSON.stringify({ content })
                 });
                 if (!res.ok) throw new Error('保存失敗');
-                patentData.content = content;
+                patentContent = content;
                 alert('✅ 保存しました');
                 exitEditMode();
-            } catch (e) {
-                alert('❌ 保存に失敗しました');
-            }
+            } catch { alert('❌ 保存に失敗しました'); }
         }
 
         // HTMLエクスポート
         function exportHTML() {
-            const content = patentData.content;
-            const blob = new Blob([`<!DOCTYPE html><html><head><meta charset="utf-8"><title>特許明細書</title></head><body>${content}</body></html>`], { type: 'text/html' });
+            const blob = new Blob(
+                [`<!DOCTYPE html><html><head><meta charset="utf-8"><title>特許明細書</title></head><body>${patentContent}</body></html>`],
+                { type: 'text/html' }
+            );
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -405,12 +393,18 @@
         // ユーティリティ
         function formatTime(isoString) {
             if (!isoString) return '-';
-            const date = new Date(isoString);
-            return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`;
+            const d = new Date(isoString);
+            return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
         }
 
         function truncate(text, maxLength) {
             return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+        }
+
+        function escHtml(str) {
+            return String(str || '')
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         }
     </script>
 </body>

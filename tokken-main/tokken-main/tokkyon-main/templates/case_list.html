@@ -79,6 +79,11 @@
             margin-top: 0.5rem;
             font-size: 0.95rem;
         }
+
+        .status-draft     { background: #334155; color: #94a3b8; }
+        .status-in_review { background: #1e3a5f; color: #60a5fa; }
+        .status-submitted { background: #14532d; color: #4ade80; }
+        .status-completed { background: #3b0764; color: #c084fc; }
     </style>
 </head>
 
@@ -115,16 +120,27 @@
     </div>
 
     <script>
-        async function loadPatents(q = '') {
+        let allProjects = [];
+
+        async function loadProjects() {
             const tableArea = document.getElementById('table-area');
-            const url = q ? `/api/patents?q=${encodeURIComponent(q)}` : '/api/patents';
             try {
-                const res = await fetch(url);
-                const patents = await res.json();
-                renderTable(patents);
+                const res = await fetch('/api/projects/');
+                if (!res.ok) throw new Error('取得失敗');
+                allProjects = await res.json();
+                renderTable(allProjects);
             } catch (e) {
                 tableArea.innerHTML = '<div class="empty-state">❌ データの読み込みに失敗しました</div>';
             }
+        }
+
+        function filterProjects(q) {
+            if (!q) return allProjects;
+            const lower = q.toLowerCase();
+            return allProjects.filter(p =>
+                (p.customer_name || '').toLowerCase().includes(lower) ||
+                (p.github_repo_url || '').toLowerCase().includes(lower)
+            );
         }
 
         function formatDate(isoStr) {
@@ -134,9 +150,16 @@
             return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
         }
 
-        function renderTable(patents) {
+        const STATUS_MAP = {
+            draft:     { label: '下書き',     cls: 'status-draft' },
+            in_review: { label: 'レビュー中', cls: 'status-in_review' },
+            submitted: { label: '提出済み',   cls: 'status-submitted' },
+            completed: { label: '完了',       cls: 'status-completed' },
+        };
+
+        function renderTable(projects) {
             const tableArea = document.getElementById('table-area');
-            if (patents.length === 0) {
+            if (!projects || projects.length === 0) {
                 tableArea.innerHTML = `
                     <div class="empty-state">
                         <div style="font-size:2rem;">📭</div>
@@ -145,19 +168,19 @@
                 return;
             }
 
-            const rows = patents.map(p => {
-                const repoDisplay = p.repo_url || '（URL不明）';
-                const repoLink = p.repo_url
-                    ? `<a class="repo-link" href="${escHtml(p.repo_url)}" target="_blank" rel="noopener">${escHtml(repoDisplay)}</a>`
-                    : escHtml(repoDisplay);
-                const detailBtn = p.project_id
-                    ? `<a href="/project/${escHtml(p.project_id)}" class="btn btn-small btn-secondary">📋 詳細</a>`
-                    : '';
+            const rows = projects.map(p => {
+                const st = STATUS_MAP[p.status] || { label: p.status, cls: 'status-draft' };
+                const repoLink = p.github_repo_url
+                    ? `<a class="repo-link" href="${escHtml(p.github_repo_url)}" target="_blank" rel="noopener">${escHtml(p.github_repo_url)}</a>`
+                    : '（未設定）';
                 return `<tr>
                     <td>${formatDate(p.created_at)}</td>
+                    <td>${escHtml(p.customer_name || '（未設定）')}</td>
                     <td>${repoLink}</td>
-                    <td><span class="badge">💬 ${p.comment_count}</span></td>
-                    <td style="display:flex;gap:0.4rem;flex-wrap:wrap;">${detailBtn}<a href="/editor/${escHtml(p.id)}" class="btn btn-small btn-secondary">📝 編集</a></td>
+                    <td><span class="badge ${st.cls}">${st.label}</span></td>
+                    <td style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+                        <a href="/project/${escHtml(p.id)}" class="btn btn-small btn-secondary">📋 詳細</a>
+                    </td>
                 </tr>`;
             }).join('');
 
@@ -165,9 +188,10 @@
                 <table class="cases-table">
                     <thead>
                         <tr>
-                            <th>生成日時</th>
+                            <th>作成日時</th>
+                            <th>顧客名</th>
                             <th>GitHubリポジトリURL</th>
-                            <th>コメント</th>
+                            <th>ステータス</th>
                             <th>操作</th>
                         </tr>
                     </thead>
@@ -176,27 +200,25 @@
         }
 
         function escHtml(str) {
-            return String(str)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
+            return String(str || '')
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         }
 
         document.getElementById('search-btn').addEventListener('click', () => {
-            loadPatents(document.getElementById('search-input').value.trim());
+            renderTable(filterProjects(document.getElementById('search-input').value.trim()));
         });
 
         document.getElementById('clear-btn').addEventListener('click', () => {
             document.getElementById('search-input').value = '';
-            loadPatents();
+            renderTable(allProjects);
         });
 
         document.getElementById('search-input').addEventListener('keydown', e => {
-            if (e.key === 'Enter') loadPatents(e.target.value.trim());
+            if (e.key === 'Enter') renderTable(filterProjects(e.target.value.trim()));
         });
 
-        loadPatents();
+        loadProjects();
     </script>
 </body>
 
