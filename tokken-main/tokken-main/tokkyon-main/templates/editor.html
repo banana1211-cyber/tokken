@@ -137,6 +137,10 @@
                 if (dbRes.ok) {
                     const draft = await dbRes.json();
                     patentContent = draft.content || '';
+                    // project_idがあれば戻るリンクを案件詳細に変更
+                    if (draft.project_id) {
+                        document.querySelector('.back-link').href = `/projects/${draft.project_id}`;
+                    }
                 } else {
                     // フォールバック: 従来のJSONベースAPI
                     const jsonRes = await fetch(`/api/patent/${patentId}`);
