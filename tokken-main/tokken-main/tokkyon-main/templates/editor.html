@@ -7,11 +7,44 @@
     <title>特許明細書エディタ - Tokkyon</title>
     <link rel="stylesheet" href="/static/style.css">
     <style>
+        @page {
+            size: A4 portrait;
+            margin: 2cm;
+        }
         @media print {
             .editor-header, .comments-panel, .modal { display: none !important; }
-            .editor-main { display: block !important; }
-            .document-panel { width: 100% !important; box-shadow: none !important; }
+            .editor-container, .editor-main {
+                display: block !important;
+                height: auto !important;
+                overflow: visible !important;
+            }
+            .document-panel {
+                display: block !important;
+                flex: none !important;
+                width: 100% !important;
+                overflow: visible !important;
+                padding: 0 !important;
+                box-shadow: none !important;
+            }
+            .document-content {
+                max-width: 100% !important;
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                min-height: 0 !important;
+                height: auto !important;
+                box-shadow: none !important;
+                border-radius: 0 !important;
+            }
+            .patent-section { margin-bottom: 1rem; }
+            h1, h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
+            table, figure, .figure { break-inside: avoid; page-break-inside: avoid; }
+            .patent-section#section-10, .patent-section#section-11 {
+                break-before: page;
+                page-break-before: always;
+            }
             body { background: white !important; color: black !important; }
+            a { text-decoration: none; color: inherit; }
         }
     </style>
 </head>
