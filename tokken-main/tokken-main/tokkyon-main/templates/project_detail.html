@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tokkyon - 案件詳細</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .info-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.25rem 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .info-row {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 0.6rem;
+            font-size: 0.9rem;
+            align-items: baseline;
+        }
+
+        .info-label {
+            color: var(--muted);
+            min-width: 120px;
+            flex-shrink: 0;
+        }
+
+        .info-value {
+            word-break: break-all;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.15rem 0.65rem;
+            border-radius: 12px;
+            font-size: 0.78rem;
+            font-weight: 600;
+        }
+
+        .status-draft     { background: #334155; color: #94a3b8; }
+        .status-in_review { background: #1e3a5f; color: #60a5fa; }
+        .status-submitted { background: #14532d; color: #4ade80; }
+        .status-completed { background: #3b0764; color: #c084fc; }
+
+        .versions-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--surface);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .versions-table th {
+            background: var(--surface-hover);
+            padding: 0.75rem 1rem;
+            text-align: left;
+            font-size: 0.85rem;
+            color: var(--muted);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .versions-table td {
+            padding: 0.85rem 1rem;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.9rem;
+            vertical-align: middle;
+        }
+
+        .versions-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .versions-table tr:hover td {
+            background: var(--surface-hover);
+        }
+
+        .version-badge {
+            display: inline-block;
+            background: var(--primary-muted, #312e81);
+            color: var(--primary, #818cf8);
+            border-radius: 6px;
+            padding: 0.1rem 0.5rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .generated-by-badge {
+            font-size: 0.8rem;
+            color: var(--muted);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 2.5rem 1rem;
+            color: var(--muted);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-top">
+                <h1>📄 Tokkyon</h1>
+                <nav style="display:flex; gap:1rem; align-items:center;">
+                    <a href="/case-list" class="settings-link">📋 案件一覧</a>
+                    <a href="/" class="settings-link">🚀 新規生成</a>
+                    <a href="/settings" class="settings-link">⚙️ 設定</a>
+                </nav>
+            </div>
+            <p class="subtitle">GitHubリポジトリから特許明細書を自動生成</p>
+        </header>
+
+        <main class="main">
+            <div style="display:flex; align-items:center; gap:1rem; margin-bottom:1.5rem;">
+                <a href="/case-list" style="color:var(--muted); text-decoration:none; font-size:0.9rem;">← 一覧へ戻る</a>
+                <h2 style="margin:0;">📋 案件詳細</h2>
+            </div>
+
+            <div id="project-info" class="info-card">
+                <div class="empty-state">⏳ 読み込み中...</div>
+            </div>
+
+            <h3 style="margin-bottom:1rem;">🗂️ バージョン履歴</h3>
+            <div id="versions-area">
+                <div class="empty-state">⏳ 読み込み中...</div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p>Powered by FastAPI + LLM</p>
+        </footer>
+    </div>
+
+    <script>
+        const projectId = '{{ project_id }}';
+
+        async function load() {
+            const [projRes, draftsRes] = await Promise.all([
+                fetch(`/api/projects/${projectId}`),
+                fetch(`/api/patent-drafts/?project_id=${projectId}`)
+            ]);
+
+            if (projRes.ok) {
+                const proj = await projRes.json();
+                renderProjectInfo(proj);
+            } else {
+                document.getElementById('project-info').innerHTML = '<div class="empty-state">❌ 案件情報が取得できませんでした</div>';
+            }
+
+            if (draftsRes.ok) {
+                const drafts = await draftsRes.json();
+                renderVersions(drafts);
+            } else {
+                document.getElementById('versions-area').innerHTML = '<div class="empty-state">❌ バージョン情報が取得できませんでした</div>';
+            }
+        }
+
+        function renderProjectInfo(proj) {
+            const statusMap = {
+                draft: { label: '下書き', cls: 'status-draft' },
+                in_review: { label: 'レビュー中', cls: 'status-in_review' },
+                submitted: { label: '提出済み', cls: 'status-submitted' },
+                completed: { label: '完了', cls: 'status-completed' }
+            };
+            const st = statusMap[proj.status] || { label: proj.status, cls: 'status-draft' };
+            const repoHtml = proj.github_repo_url
+                ? `<a href="${escHtml(proj.github_repo_url)}" target="_blank" rel="noopener" style="color:var(--primary)">${escHtml(proj.github_repo_url)}</a>`
+                : '（未設定）';
+
+            document.getElementById('project-info').innerHTML = `
+                <div class="info-row"><span class="info-label">ステータス</span><span class="info-value"><span class="status-badge ${st.cls}">${st.label}</span></span></div>
+                <div class="info-row"><span class="info-label">顧客名</span><span class="info-value">${escHtml(proj.customer_name || '（未設定）')}</span></div>
+                <div class="info-row"><span class="info-label">GitHubリポジトリ</span><span class="info-value">${repoHtml}</span></div>
+                <div class="info-row"><span class="info-label">作成日時</span><span class="info-value">${formatDate(proj.created_at)}</span></div>
+            `;
+        }
+
+        function renderVersions(drafts) {
+            const area = document.getElementById('versions-area');
+            if (!drafts || drafts.length === 0) {
+                area.innerHTML = '<div class="empty-state">📭 バージョンがありません</div>';
+                return;
+            }
+
+            // v1（最小バージョン）のidがJSONファイル名と対応するeditorId
+            const v1 = drafts.reduce((min, d) => d.version < min.version ? d : min, drafts[0]);
+            const editorId = v1.id;
+
+            // バージョン降順（最新が上）
+            drafts.sort((a, b) => b.version - a.version);
+            const latestVersion = drafts[0].version;
+
+            const rows = drafts.map(d => {
+                const genLabel = d.generated_by === 'ai' ? '🤖 AI生成' : '✏️ 手動編集';
+                const editBtn = `<a href="/editor/${escHtml(editorId)}" class="btn btn-small btn-secondary">📝 開く</a>`;
+                return `<tr>
+                    <td><span class="version-badge">v${d.version}</span>${d.version === latestVersion ? ' <span style="color:var(--muted);font-size:0.75rem;">（最新）</span>' : ''}</td>
+                    <td><span class="generated-by-badge">${genLabel}</span></td>
+                    <td>${formatDate(d.created_at)}</td>
+                    <td>${editBtn}</td>
+                </tr>`;
+            }).join('');
+
+            area.innerHTML = `
+                <table class="versions-table">
+                    <thead>
+                        <tr>
+                            <th>バージョン</th>
+                            <th>種別</th>
+                            <th>作成日時</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>`;
+        }
+
+        function formatDate(iso) {
+            if (!iso) return '-';
+            const d = new Date(iso);
+            const p = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}/${p(d.getMonth()+1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+        }
+
+        function escHtml(str) {
+            return String(str || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        load();
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tokkyon - 案件一覧</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .search-bar {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .search-bar input {
+            flex: 1;
+        }
+
+        .cases-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--surface);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .cases-table th {
+            background: var(--surface-hover);
+            padding: 0.75rem 1rem;
+            text-align: left;
+            font-size: 0.85rem;
+            color: var(--muted);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .cases-table td {
+            padding: 0.85rem 1rem;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.9rem;
+            vertical-align: middle;
+        }
+
+        .cases-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .cases-table tr:hover td {
+            background: var(--surface-hover);
+        }
+
+        .repo-link {
+            color: var(--primary);
+            text-decoration: none;
+            word-break: break-all;
+        }
+
+        .repo-link:hover {
+            text-decoration: underline;
+        }
+
+        .badge {
+            display: inline-block;
+            background: var(--surface-hover);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 0.1rem 0.55rem;
+            font-size: 0.78rem;
+            color: var(--muted);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--muted);
+        }
+
+        .empty-state p {
+            margin-top: 0.5rem;
+            font-size: 0.95rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-top">
+                <h1>📄 Tokkyon</h1>
+                <nav style="display:flex; gap:1rem; align-items:center;">
+                    <a href="/" class="settings-link">🚀 新規生成</a>
+                    <a href="/settings" class="settings-link">⚙️ 設定</a>
+                </nav>
+            </div>
+            <p class="subtitle">GitHubリポジトリから特許明細書を自動生成</p>
+        </header>
+
+        <main class="main">
+            <h2 style="margin-bottom:1.25rem;">📋 案件一覧</h2>
+
+            <div class="search-bar">
+                <input type="text" id="search-input" placeholder="リポジトリURLで検索..." />
+                <button class="btn btn-secondary" id="search-btn">🔍 検索</button>
+                <button class="btn btn-secondary" id="clear-btn">✕ クリア</button>
+            </div>
+
+            <div id="table-area">
+                <div class="empty-state">⏳ 読み込み中...</div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p>Powered by FastAPI + LLM</p>
+        </footer>
+    </div>
+
+    <script>
+        async function loadPatents(q = '') {
+            const tableArea = document.getElementById('table-area');
+            const url = q ? `/api/patents?q=${encodeURIComponent(q)}` : '/api/patents';
+            try {
+                const res = await fetch(url);
+                const patents = await res.json();
+                renderTable(patents);
+            } catch (e) {
+                tableArea.innerHTML = '<div class="empty-state">❌ データの読み込みに失敗しました</div>';
+            }
+        }
+
+        function formatDate(isoStr) {
+            if (!isoStr) return '-';
+            const d = new Date(isoStr);
+            const pad = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        }
+
+        function renderTable(patents) {
+            const tableArea = document.getElementById('table-area');
+            if (patents.length === 0) {
+                tableArea.innerHTML = `
+                    <div class="empty-state">
+                        <div style="font-size:2rem;">📭</div>
+                        <p>案件がありません。新規生成から特許明細書を作成してください。</p>
+                    </div>`;
+                return;
+            }
+
+            const rows = patents.map(p => {
+                const repoDisplay = p.repo_url || '（URL不明）';
+                const repoLink = p.repo_url
+                    ? `<a class="repo-link" href="${escHtml(p.repo_url)}" target="_blank" rel="noopener">${escHtml(repoDisplay)}</a>`
+                    : escHtml(repoDisplay);
+                const detailBtn = p.project_id
+                    ? `<a href="/project/${escHtml(p.project_id)}" class="btn btn-small btn-secondary">📋 詳細</a>`
+                    : '';
+                return `<tr>
+                    <td>${formatDate(p.created_at)}</td>
+                    <td>${repoLink}</td>
+                    <td><span class="badge">💬 ${p.comment_count}</span></td>
+                    <td style="display:flex;gap:0.4rem;flex-wrap:wrap;">${detailBtn}<a href="/editor/${escHtml(p.id)}" class="btn btn-small btn-secondary">📝 編集</a></td>
+                </tr>`;
+            }).join('');
+
+            tableArea.innerHTML = `
+                <table class="cases-table">
+                    <thead>
+                        <tr>
+                            <th>生成日時</th>
+                            <th>GitHubリポジトリURL</th>
+                            <th>コメント</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>`;
+        }
+
+        function escHtml(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        document.getElementById('search-btn').addEventListener('click', () => {
+            loadPatents(document.getElementById('search-input').value.trim());
+        });
+
+        document.getElementById('clear-btn').addEventListener('click', () => {
+            document.getElementById('search-input').value = '';
+            loadPatents();
+        });
+
+        document.getElementById('search-input').addEventListener('keydown', e => {
+            if (e.key === 'Enter') loadPatents(e.target.value.trim());
+        });
+
+        loadPatents();
+    </script>
+</body>
+
+</html>
